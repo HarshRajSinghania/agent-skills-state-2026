@@ -133,7 +133,7 @@ Search results change daily, so a rerun draws a different sample; the method, no
 
 ## Responsible disclosure
 
-The structural triage left 30 possible live credentials in 17 repositories. These were reported privately to the repository owners before this report was published. No repository with a possible live credential is named here, and the public dataset has no per-repository counts for the secret rules, so it cannot be used to find them. No credential was tried against any service.
+The structural triage left 30 possible live credentials in 17 repositories. The structural triage left 30 possible live credentials in 17 repositories. Before publication each owner was re-checked: 4 repositories turned out to hold documented test values or shortened examples. None of the remaining 13 had GitHub private vulnerability reporting enabled; 2 owners were contacted by email and 11 received a short public notice that names no file, line or key type and asks them to rotate the key. No repository with a possible live credential is named here, and the public dataset leaves out per-repository counts for the secret rules.
 
 ## How to cite
 
