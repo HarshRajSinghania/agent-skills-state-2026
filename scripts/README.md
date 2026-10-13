@@ -1,0 +1,64 @@
+# Scripts
+
+These are the scripts that produced the dataset, plus `check_numbers.py`, which CI runs. They use Python 3.12 and the standard library, except `scan.py` (PyYAML) and `charts.py` (matplotlib).
+
+**A rerun gives a different sample.** GitHub code search results change every day, so the same queries and the same seed draw different repositories. What reproduces is the method; expect the shares to move by a few points, not the exact numbers in this report.
+
+## Working folder
+
+Every script takes a working folder (`W` below) as its first argument. Set it up once:
+
+```sh
+W=$HOME/skills-state && mkdir -p "$W/raw" "$W/out" "$W/tools" "$W/bin"
+cp scripts/*.py "$W/bin/"
+python3.12 -m venv "$W/venv"
+"$W/venv/bin/pip" install pyyaml matplotlib git+https://github.com/basitalisandhu/skill-scan-gate
+git clone https://github.com/basitalisandhu/claude-code-tooling-skills "$W/tools/claude-code-tooling-skills"
+git clone https://github.com/basitalisandhu/mcp-tools-lint "$W/tools/mcp-tools-lint"
+(cd "$W/tools/mcp-tools-lint" && npm ci && npm run build)
+```
+
+`build.py` imports `hooknet.py` from `$W/bin`, which is why the scripts are copied there. The method used skill-scan-gate 0.2.0 (commit e53fdc8), claude-code-tooling-skills commit d5971fb and mcp-tools-lint 0.2.0 (commit 8540f7c); check out those commits to match it. You need the GitHub CLI (`gh`) signed in for the search and metadata steps.
+
+## Steps
+
+```sh
+PY="$W/venv/bin/python"
+
+# 1. Search: 31 code search queries, 93 requests, about 15 minutes at the rate limit
+$PY "$W/bin/collect.py" "$W/raw"
+
+# 2. Sample: distinct non-fork repositories, random draw of 3,000 with seed 20261013
+$PY "$W/bin/draw_sample.py" "$W" 3000 20261013
+
+# 3. Fetch: metadata from the GraphQL API, then a sparse clone of agent configuration files only
+$PY "$W/bin/meta.py" "$W/raw/sample.txt" "$W/raw/meta.jsonl"
+$PY "$W/bin/fetch.py" "$W" "$W/raw/sample.txt"
+
+# 4. Scan: skill-scan-gate, the description linter, inventory, portability, YAML parse; then committed MCP tool lists
+$PY "$W/bin/scan.py" "$W"
+$PY "$W/bin/mcplint.py" "$W"
+
+# 5. Analyse: dataset, headline numbers, charts
+$PY "$W/bin/build.py" "$W"
+$PY "$W/bin/stats.py" "$W"
+$PY "$W/bin/charts.py" "$W"
+```
+
+Nothing in a fetched repository is executed: `fetch.py` disables Git hooks, LFS smudging and symbolic links, and `mcplint.py` lints only JSON files already committed, without starting any server.
+
+## Hand-made inputs
+
+Three inputs come from reading findings by hand, as described in `METHOD.md`:
+
+- `raw/hook_review.csv`: a header line, then one `folder,verdict` line for each repository that `hooknet.py` flags, where the verdict is `remote`, `local`, `unclear` or `not-network`. `build.py` reads it.
+- `out/precision.csv`: the precision table. `sample.py RULE K SEED` and `secretsample.py RULE K SEED` print a random sample of findings to judge, one per repository; secret values are never printed.
+- `raw/secret_triage.json`: the structural secret triage. `candidates.py` writes `raw/secret_candidates.json`; `livecheck.py` reads it as `raw/secret_candidates2.json` after review and writes `raw/secret_triage.json`. Neither prints a secret value. `build.py` uses only the total from this file; the file itself, which names repositories, must stay private.
+
+## Checking the published numbers
+
+```sh
+python3 scripts/check_numbers.py
+```
+
+It checks that `data/dataset.csv` and `data/dataset.json` have the row count in `data/stats.json`, the columns the analysis needs and none of the withheld secret-rule columns, and that every number in the README's "Key findings" list matches `data/stats.json`. CI runs it on every push and pull request.
